@@ -439,8 +439,8 @@ impl Node {
                     }
                     if let Some(get) = msg_obj.get("get") {
                         if let Some(get_obj) = get.as_object() {
-                            self.incoming_get(get_obj, from);
-                            self.outgoing_message(&msg_str, from, msg_id, None); // TODO: randomly sample recipients
+                            self.incoming_get(get_obj, from, &msg_id, &msg_str);
+                            // self.outgoing_message(&msg_str, from, msg_id, None); // removed for demo branch
                         }
                     }
                 }
@@ -570,16 +570,20 @@ impl Node {
         }
     }
 
-    fn incoming_get(&mut self, get: &serde_json::Map<String, SerdeJsonValue>, from: &String) {
+    fn incoming_get(&mut self, get: &serde_json::Map<String, SerdeJsonValue>, from: &String, msg_id: &String, msg_str: &String) {
+        let mut recipients = HashSet::new();
         if let Some(path) = get.get("#") {
             if let Some(path) = path.as_str() {
                 {
-                    debug!("{} subscribed to {}", from, path);
+                    let topic = path.split("/").next().unwrap_or("");
+                    debug!("{} subscribed to {}", from, topic);
                     let mut subscribers_by_topic = self.subscribers_by_topic.write().unwrap();
-                    if !subscribers_by_topic.contains_key(path) {
-                        subscribers_by_topic.insert(path.to_string(), HashSet::new());
+                    if !subscribers_by_topic.contains_key(topic) {
+                        subscribers_by_topic.insert(topic.to_string(), HashSet::new());
                     }
-                    subscribers_by_topic.get_mut(path.clone()).unwrap().insert(from.clone());
+                    let subscribers = subscribers_by_topic.get_mut(topic.clone()).unwrap();
+                    subscribers.insert(from.clone());
+                    recipients.extend(subscribers.clone());
                 }
                 if let Some(key) = get.get(".") {
                     // debug!("yes . {} {}", path, key);
@@ -604,6 +608,7 @@ impl Node {
                 }
             }
         }
+        self.outgoing_message(&msg_str, from, msg_id.to_string(), Some(recipients));
     }
 
     /// Set a GunValue for the Node.
